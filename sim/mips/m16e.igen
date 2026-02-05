@@ -305,16 +305,22 @@
   switch (xsregs) {
   case 7:
     GPR[30] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
+    ATTRIBUTE_FALLTHROUGH;
   case 6:
     GPR[23] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
+    ATTRIBUTE_FALLTHROUGH;
   case 5:
     GPR[22] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
+    ATTRIBUTE_FALLTHROUGH;
   case 4:
     GPR[21] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
+    ATTRIBUTE_FALLTHROUGH;
   case 3:
     GPR[20] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
+    ATTRIBUTE_FALLTHROUGH;
   case 2:
     GPR[19] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
+    ATTRIBUTE_FALLTHROUGH;
   case 1:
     GPR[18] = EXTEND32 (do_load (SD_,AccessLength_WORD, temp -= 4, 0));
   }
