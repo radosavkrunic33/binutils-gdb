@@ -3032,7 +3032,7 @@ static reloc_howto_type micromips_elf64_howto_table_rela[] =
 	 true,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
-	 _bfd_mips_elf_generic_reloc,   /* special_function */
+	 _bfd_mips_elf_hi16_reloc,   /* special_function */
 	 "_MICROMIPS_PCHI16",	/* name */
 	 false,			/* partial_inplace */
 	 0,			/* src_mask */
@@ -3046,7 +3046,7 @@ static reloc_howto_type micromips_elf64_howto_table_rela[] =
 	 true,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_dont, /* complain_on_overflow */
-	 _bfd_mips_elf_generic_reloc,   /* special_function */
+	 _bfd_mips_elf_lo16_reloc,   /* special_function */
 	 "R_MICROMIPS_PCLO16",	/* name */
 	 false,			/* partial_inplace */
 	 0,			/* src_mask */
