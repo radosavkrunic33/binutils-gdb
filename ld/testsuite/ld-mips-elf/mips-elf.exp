@@ -328,6 +328,10 @@ if { $linux_gnu } {
 # Check MIPS16 markings being passed through link.
 run_dump_test "mips16-1"
 
+# Check if line numbers are correct for compressed functions.
+run_dump_test "mips16-lineno"
+run_dump_test "micromips-lineno"
+
 # MIPS branch offset final link checking.
 run_dump_test "branch-misc-1"
 run_dump_test "branch-misc-2"
