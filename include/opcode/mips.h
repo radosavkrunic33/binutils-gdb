@@ -1085,6 +1085,10 @@ static const unsigned int mips_isa_table[] = {
 #define ASE_EVA_R6		0x02000000
 /* Crypto ASE */
 #define ASE_CRYPTO		0x04000000
+/* The Virtualization ASE has Global INValidate (GINV)
+   instructions which are only valid when both ASEs are enabled.  */
+#define ASE_GINV_VIRT		0x08000000
+
 
 /* MIPS ISA defines, use instead of hardcoding ISA level.  */
 
@@ -1955,6 +1959,9 @@ extern const int bfd_mips16_num_opcodes;
    "&" 2-bit DSP accumulator register at bit 18.
    "J" 3-bit MFTR and MTTR sel at bit 4.
    "y" 5-bit control target register at bit 21 (RT).
+
+   GINV ASE usage:
+   "+\" 2 bit Global TLB invalidate type at bit 8
 
    Other:
    "()" Parens surrounding optional value.
