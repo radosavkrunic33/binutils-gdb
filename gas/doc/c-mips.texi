@@ -228,6 +228,12 @@ Generate code for the MIPS eXtended Physical Address (XPA) Extension.
 This tells the assembler to accept XPA instructions.
 @samp{-mno-xpa} turns off this option.
 
+@item -mmxu
+@itemx -mno-mxu
+Generate code for the XBurst MXU Extension.
+This tells the assembler to accept MXU instructions.
+@samp{-mno-mxu} turns off this option.
+
 @item -mvirt
 @itemx -mno-virt
 Generate code for the Virtualization Application Specific Extension.
@@ -1237,6 +1243,13 @@ from being accepted.
 The directive @code{.set crypto} makes the assembler accept instructions
 from the crypto extension from that point on in the assembly.  The
 @code{.set nocrypto} directive prevents crypto instructions from being accepted.
+
+@cindex XBurst MXU instruction generation override
+@kindex @code{.set mxu}
+@kindex @code{.set nomxu}
+The directive @code{.set mxu} makes the assembler accept instructions
+from the MXU Extension from that point on in the assembly.  The
+@code{.set nomxu} directive prevents MXU instructions from being accepted.
 
 Traditional MIPS assemblers do not support these directives.
 

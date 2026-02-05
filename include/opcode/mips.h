@@ -182,7 +182,13 @@ enum mips_operand_type {
   OP_CHECK_PREV,
 
   /* A register operand that must not be zero.  */
-  OP_NON_ZERO_REG
+  OP_NON_ZERO_REG,
+
+  /* A named MXU operation pattern represented as a string or integer.  */
+  OP_MAPPED_STRING,
+
+  /* 2-bit immediate MXU stride operand.  */
+  OP_MXU_STRIDE
 };
 
 /* Enumerates the types of MIPS register.  */
@@ -233,7 +239,13 @@ enum mips_reg_operand_type {
   OP_REG_MSA,
 
   /* MSA control registers $0-$31.  */
-  OP_REG_MSA_CTRL
+  OP_REG_MSA_CTRL,
+
+  /* MXU registers xr0-xr16, mxu_cr.  */
+  OP_REG_MXU,
+
+  /* MXU general purpose registers xr0-xr16.  */
+  OP_REG_MXU_GP
 };
 
 /* Base class for all operands.  */
@@ -289,6 +301,14 @@ struct mips_mapped_int_operand
 
   /* True if the operand should be printed as hex rather than decimal.  */
   bool print_hex;
+};
+
+/*  Uses a lookup table to map MXU operation patterns to integer encodings.  */
+struct mips_mapped_string_operand
+{
+  struct mips_operand root;
+  const char ** strings;
+  int allow_constants;
 };
 
 /* An operand that encodes the most significant bit position of a bitfield.
@@ -785,6 +805,11 @@ mips_opcode_32bit_p (const struct mips_opcode *mo)
    following), for quick reference when adding more:
    "AB                        "
    "ab d        m     stuvwxy "
+
+   Extension character sequences used so far ("`" followed by the
+   following), for quick reference when adding more:
+   "AB  E   I     OP RSTU     "
+   "abcdefg i   m op r        "
 */
 
 /* These are the bits which may be set in the pinfo field of an
@@ -1089,6 +1114,8 @@ static const unsigned int mips_isa_table[] = {
    instructions which are only valid when both ASEs are enabled.  */
 #define ASE_GINV_VIRT		0x08000000
 
+/* MXU Extension.  */
+#define ASE_MXU			0x10000000
 
 /* MIPS ISA defines, use instead of hardcoding ISA level.  */
 
