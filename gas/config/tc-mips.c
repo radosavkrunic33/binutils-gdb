@@ -1506,6 +1506,8 @@ enum options
     OPTION_NO_MIPS16E2,
     OPTION_CRC,
     OPTION_NO_CRC,
+    OPTION_CRYPTO,
+    OPTION_NO_CRYPTO,
     OPTION_M4650,
     OPTION_NO_M4650,
     OPTION_M4010,
@@ -1653,6 +1655,8 @@ const struct option md_longopts[] =
   {"mno-loongson-ext", no_argument, NULL, OPTION_NO_LOONGSON_EXT},
   {"mloongson-ext2", no_argument, NULL, OPTION_LOONGSON_EXT2},
   {"mno-loongson-ext2", no_argument, NULL, OPTION_NO_LOONGSON_EXT2},
+  {"mcrypto", no_argument, NULL, OPTION_CRYPTO},
+  {"mno-crypto", no_argument, NULL, OPTION_NO_CRYPTO},
 
   /* Old-style architecture options.  Don't add more of these.  */
   {"m4650", no_argument, NULL, OPTION_M4650},
@@ -1873,6 +1877,11 @@ static const struct mips_ase mips_ases[] = {
   { "loongson-ext2", ASE_LOONGSON_EXT | ASE_LOONGSON_EXT2, 0,
     OPTION_LOONGSON_EXT2, OPTION_NO_LOONGSON_EXT2,
     0, 0, -1, -1,
+    -1 },
+
+  { "crypto", ASE_CRYPTO, 0,
+    OPTION_CRYPTO, OPTION_NO_CRYPTO,
+    6,  6, -1, -1,
     -1 },
 };
 
@@ -6404,6 +6413,9 @@ static bool
 match_tied_reg_operand (struct mips_arg_info *arg, unsigned int other_regno)
 {
   unsigned int regno;
+
+  if (match_reg (arg, OP_REG_MSA, &regno) && regno == other_regno)
+    return TRUE;
 
   return match_reg (arg, OP_REG_GP, &regno) && regno == other_regno;
 }
@@ -20006,6 +20018,8 @@ mips_convert_ase_flags (int ase)
     ext_ases |= AFL_ASE_LOONGSON_EXT;
   if (ase & ASE_LOONGSON_EXT2)
     ext_ases |= AFL_ASE_LOONGSON_EXT2;
+  if (ase & ASE_CRYPTO)
+    ext_ases |= AFL_ASE_CRYPTO;
 
   return ext_ases;
 }
@@ -21048,6 +21062,9 @@ MIPS options:\n\
   fprintf (stream, _("\
 -mloongson-ext2		generate Loongson EXTensions R2 (EXT2) instructions\n\
 -mno-loongson-ext2	do not generate Loongson EXTensions R2 Instructions\n"));
+  fprintf (stream, _("\
+-mcrypto			generate crypto instructions\n\
+-mno-crypto		do not generate crypto instructions\n"));
   fprintf (stream, _("\
 -minsn32		only generate 32-bit microMIPS instructions\n\
 -mno-insn32		generate all microMIPS instructions\n"));

@@ -274,6 +274,13 @@ Application Specific Extension.  This tells the assembler to accept EXT2
 instructions.
 @samp{-mno-loongson-ext2} turns off this option.
 
+@item -mcrypto
+@itemx -mno-crypto
+Generate code for the Crypto Application Specific
+Extension.
+This tells the assembler to accept crypto instructions.
+@samp{-mno-crypto} turns off this option.
+
 @item -minsn32
 @itemx -mno-insn32
 Only use 32-bit instruction encodings when generating code for the
@@ -1163,7 +1170,7 @@ instructions from being accepted.
 @kindex @code{.set xpa}
 @kindex @code{.set noxpa}
 The directive @code{.set xpa} makes the assembler accept instructions
-from the XPA Extension from that point on in the assembly.  The 
+from the XPA Extension from that point on in the assembly.  The
 @code{.set noxpa} directive prevents XPA instructions from being accepted.
 
 @cindex MIPS16e2 instruction generation override
@@ -1222,6 +1229,13 @@ instructions from the Loongson EXT2 from that point on in the assembly.
 This directive implies @code{.set loognson-ext}.
 The @code{.set noloongson-ext2} directive prevents Loongson EXT2 instructions
 from being accepted.
+
+@cindex MIPS crypto instruction generation override
+@kindex @code{.set crypto}
+@kindex @code{.set nocrypto}
+The directive @code{.set crypto} makes the assembler accept instructions
+from the crypto extension from that point on in the assembly.  The
+@code{.set nocrypto} directive prevents crypto instructions from being accepted.
 
 Traditional MIPS assemblers do not support these directives.
 

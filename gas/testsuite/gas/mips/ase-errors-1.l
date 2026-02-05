@@ -52,3 +52,8 @@
 .*:128: Error: opcode not supported .* `scwpe \$2,\$3,\$4'
 .*:131: Error: opcode not supported .* `llwpe \$2,\$3,\$4'
 .*:132: Error: opcode not supported .* `scwpe \$2,\$3,\$4'
+# ----------------------------------------------------------------------------
+.*:137: Error: invalid operands `sha1.ms.2 \$w4,\$w7,\$w6'
+.*:138: Warning: the `crypto' extension requires MIPS32 revision 6 or greater
+.*:141: Error: opcode not supported.* `sha1.ms.1 \$w4,\$w7,\$w6'
+# ----------------------------------------------------------------------------

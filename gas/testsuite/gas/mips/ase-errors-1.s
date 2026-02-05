@@ -131,6 +131,15 @@
 	llwpe	$2, $3, $4	# ERROR: only avaialable on R6
 	scwpe	$2, $3, $4	# ERROR: only avaialable on R6
 
+	.set mips32r6
+	.set crypto		# OK
+	aes128.enc	$w4,$w7	# OK
+	sha1.ms.2 	$w4,$w7,$w6	#ERROR: Invalid operands
+	.set mips32r5		# ERROR: too low
+	aes256.enc	$w4,$w7,$w6	# OK
+	.set nocrypto
+	sha1.ms.1	$w4,$w7,$w6	# ERROR: crypto not enabled
+
 	# There should be no errors after this.
 	.set fp=32
 	.set mips1
