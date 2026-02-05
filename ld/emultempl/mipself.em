@@ -45,6 +45,7 @@ static bfd *stub_bfd;
 static bool insn32;
 static bool ignore_branch_isa;
 static bool compact_branches;
+static bool user_def_sdata_sections;
 
 struct hook_stub_info
 {
@@ -204,6 +205,7 @@ mips_create_output_section_statements (void)
   if (is_mips_elf (link_info.output_bfd))
     {
       _bfd_mips_elf_compact_branches (&link_info, compact_branches);
+      _bfd_mips_elf_user_def_sdata_sections (&link_info, user_def_sdata_sections);
       _bfd_mips_elf_init_stubs (&link_info, mips_add_stub_section);
     }
 }
@@ -239,6 +241,8 @@ PARSE_AND_LIST_LONGOPTS='
   { "no-ignore-branch-isa", no_argument, NULL, OPTION_NO_IGNORE_BRANCH_ISA },
   { "compact-branches", no_argument, NULL, OPTION_COMPACT_BRANCHES },
   { "no-compact-branches", no_argument, NULL, OPTION_NO_COMPACT_BRANCHES },
+  { "user-defined-sdata-sections", no_argument, NULL, OPTION_USER_DEF_SDATA_SECTIONS },
+  { "no-user-defined-sdata-sections", no_argument, NULL, OPTION_NO_USER_DEF_SDATA_SECTIONS },
 '
 
 PARSE_AND_LIST_OPTIONS='
@@ -262,6 +266,17 @@ PARSE_AND_LIST_OPTIONS='
   fprintf (file, _("\
   --no-compact-branches       Generate delay slot branches/jumps for MIPS R6\n"
 		   ));
+  fprintf (file, _("\
+  --user-defined-sdata-sections\n\
+                              When processing a gp relative relocation against a symbol\n\
+                              in a .sdata_<num>/.sbss_<num> section use the gp value\n\
+                              based on the address of the _gp_<num> symbol where <num> is\n\
+                              the number of the .sbss/.sdata section the symbol is in\n"));
+  fprintf (file, _("\
+  --no-user-defined-sdata-sections\n\
+                              When processing a gp relative relocation against a symbol\n\
+                              in a .sdata_<num>/.sbss_<num> section use the gp value\n\
+                              based on the address of the _gp symbol\n"));
 '
 
 PARSE_AND_LIST_ARGS_CASES='
@@ -287,6 +302,14 @@ PARSE_AND_LIST_ARGS_CASES='
 
     case OPTION_NO_COMPACT_BRANCHES:
       compact_branches = false;
+      break;
+
+    case OPTION_USER_DEF_SDATA_SECTIONS:
+      user_def_sdata_sections = true;
+      break;
+
+    case OPTION_NO_USER_DEF_SDATA_SECTIONS:
+      user_def_sdata_sections = false;
       break;
 '
 

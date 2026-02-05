@@ -482,6 +482,12 @@ struct mips_elf_link_hash_table
   /* True if we are targetting R6 compact branches.  */
   bool compact_branches;
 
+  /* When True and processing a gp relative relocation against a symbol
+     in a .sdata_<num>/.sbss_<num> section use the gp value
+     based on the address of the _gp_<num> symbol where <num> is
+     the number of the .sbss/.sdata section the symbol is in.  */
+  bool user_def_sdata_sections;
+
   /* True if we already reported the small-data section overflow.  */
   bool small_data_overflow_reported;
 
@@ -602,6 +608,9 @@ struct mips_elf_obj_tdata
      text/data symbols defined in dynamic objects.  */
   asection *elf_data_section;
   asection *elf_text_section;
+
+  struct mips_hi16 *mips_hi16_list;
+  bfd_signed_vma sdata_section[1000];
 };
 
 /* Get MIPS ELF private object data from BFD's tdata.  */
@@ -5657,6 +5666,7 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
   struct mips_elf_link_hash_table *htab;
   bfd *dynobj;
   bool resolved_to_zero;
+  int gp_sec_num = 0;
 
   dynobj = elf_hash_table (info)->dynobj;
   htab = mips_elf_hash_table (info);
@@ -6053,6 +6063,27 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
   if (gnu_local_gp_p)
     symbol = gp;
 
+  if (mips_elf_hash_table (info)->user_def_sdata_sections && sec != NULL)
+    {
+      if (strncmp (".sdata_", sec->name, 7) == 0)
+	gp_sec_num = atoi (&sec->name[7]);
+      else if (strncmp (".sbss_", sec->name, 6) == 0)
+	gp_sec_num = atoi (&sec->name[6]);
+
+      if (gp_sec_num)
+	{
+	  if (gp_sec_num < 0 || gp_sec_num > 999
+	      || mips_elf_tdata(abfd)->sdata_section[gp_sec_num] == -1)
+	    {
+	      (*_bfd_error_handler)
+		(_("%pB: Error: Unable to apply gp relocation to section `%s'"),
+		   abfd, sec->name);
+	      bfd_set_error (bfd_error_bad_value);
+	    }
+	}
+
+      gp = mips_elf_tdata(abfd)->sdata_section[gp_sec_num];
+    }
   /* Global R_MIPS_GOT_PAGE/R_MICROMIPS_GOT_PAGE relocations are equivalent
      to R_MIPS_GOT_DISP/R_MICROMIPS_GOT_DISP.  The addend is applied by the
      corresponding R_MIPS_GOT_OFST/R_MICROMIPS_GOT_OFST.  */
@@ -7649,7 +7680,8 @@ _bfd_mips_elf_section_processing (bfd *abfd, Elf_Internal_Shdr *hdr)
 	 on it in an input file will be followed.  */
       if (strcmp (name, ".sdata") == 0
 	  || strcmp (name, ".lit8") == 0
-	  || strcmp (name, ".lit4") == 0)
+	  || strcmp (name, ".lit4") == 0
+	  || strncmp (name, ".sdata_", 7) == 0)
 	hdr->sh_flags |= SHF_ALLOC | SHF_WRITE | SHF_MIPS_GPREL;
       else if (strcmp (name, ".srdata") == 0)
 	hdr->sh_flags |= SHF_ALLOC | SHF_MIPS_GPREL;
@@ -7941,7 +7973,9 @@ _bfd_mips_elf_fake_sections (bfd *abfd, Elf_Internal_Shdr *hdr, asection *sec)
   else if (strcmp (name, ".got") == 0
 	   || strcmp (name, ".srdata") == 0
 	   || strcmp (name, ".sdata") == 0
+	   || strncmp (name, ".sdata_", 7) == 0
 	   || strcmp (name, ".sbss") == 0
+	   || strncmp (name, ".sbss_", 6) == 0
 	   || strcmp (name, ".lit4") == 0
 	   || strcmp (name, ".lit8") == 0)
     hdr->sh_flags |= SHF_MIPS_GPREL;
@@ -14948,6 +14982,12 @@ _bfd_mips_elf_compact_branches (struct bfd_link_info *info, bool on)
   mips_elf_hash_table (info)->compact_branches = on;
 }
 
+void
+_bfd_mips_elf_user_def_sdata_sections (struct bfd_link_info *info, bool on)
+{
+  mips_elf_hash_table (info)->user_def_sdata_sections = on;
+}
+
 
 /* Structure for saying that BFD machine EXTENSION extends BASE.  */
 
@@ -15297,6 +15337,23 @@ _bfd_mips_elf_final_link (bfd *abfd, struct bfd_link_info *info)
   htab_traverse (htab->la25_stubs, mips_elf_create_la25_stub, &hti);
   if (hti.error)
     return false;
+
+  unsigned int gp_num;
+  for (gp_num = 0 ; gp_num < 1000 ; gp_num++)
+    {
+      struct bfd_link_hash_entry *h;
+      char gp_name[8];
+      bfd_signed_vma gp_vma = -1;
+
+      sprintf (gp_name, "_gp_%d", gp_num);
+      h = bfd_link_hash_lookup (info->hash, gp_name, false, false, true);
+      if (h != NULL && h->type == bfd_link_hash_defined)
+	gp_vma = (h->u.def.value
+		  + h->u.def.section->output_section->vma
+		  + h->u.def.section->output_offset);
+
+      mips_elf_tdata(abfd)->sdata_section[gp_num] = gp_vma;
+    }
 
   /* Get a value for the GP register.  */
   if (elf_gp (abfd) == 0)

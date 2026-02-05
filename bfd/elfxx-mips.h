@@ -182,6 +182,8 @@ extern void _bfd_mips_elf_linker_flags
   (struct bfd_link_info *, bool, bool, bool);
 extern void _bfd_mips_elf_compact_branches
   (struct bfd_link_info *, bool);
+extern void _bfd_mips_elf_user_def_sdata_sections
+  (struct bfd_link_info *, bool);
 extern bool _bfd_mips_elf_init_stubs
   (struct bfd_link_info *,
    asection *(*) (const char *, asection *, asection *));
