@@ -322,6 +322,30 @@ struct mips_elf_la25_stub {
 #define LA25_ADDIU_MICROMIPS(VAL)					\
   (0x33390000 | (VAL))				/* addiu t9,t9,VAL */
 
+/* Information for an R6 interworking stub. Since Release 6 removed
+   JALX, switching between MIPS and microMIPS ISAs requires a stub.  */
+struct mips_elf_r6_interwork_stub {
+  /* The generated section that contains this stub.  */
+  asection *stub_section;
+
+  /* The offset of the stub from the start of STUB_SECTION.  */
+  bfd_vma offset;
+
+/* One symbol for the original function.  Its location is available
+     in H->root.root.u.def.  */
+  struct mips_elf_link_hash_entry *h;
+
+  bool needs_t9;
+
+  bool caller_is_micromips;
+};
+
+/* Macros for populating a mips_elf_r6_interwork_stub.  */
+
+#define LA25_JRC_MICROMIPS(REG)  (0x4403 + ((REG) << 5))
+// #define JR_R6_REG(rs) (0x00000009 | ((rs) << 21))
+#define JR_R6 (0x03200009)
+
 /* This structure is passed to mips_elf_sort_hash_table_f when sorting
    the dynamic symbols.  */
 
@@ -389,6 +413,9 @@ struct mips_elf_link_hash_entry
   /* The la25 stub we have created for ths symbol, if any.  */
   struct mips_elf_la25_stub *la25_stub;
 
+  /* The r6 interwork stub for the symbol, if there are any.  */
+  struct mips_elf_r6_interwork_stub *r6_interwork_stub;
+
   /* Number of R_MIPS_32, R_MIPS_REL32, or R_MIPS_64 relocs against
      this symbol.  */
   unsigned int possibly_dynamic_relocs;
@@ -439,6 +466,9 @@ struct mips_elf_link_hash_entry
      any non-PIC input file.  This is used to determine whether an
      la25 stub is required.  */
   unsigned int has_nonpic_branches : 1;
+
+  /* It's used to determine wheather an r6_interwork_stub is required.  */
+  unsigned int has_r6_interwork_calls: 1;
 
   /* Does this symbol need a traditional MIPS lazy-binding stub
      (as opposed to a PLT entry)?  */
@@ -543,6 +573,10 @@ struct mips_elf_link_hash_table
   /* A table of mips_elf_la25_stubs, indexed by (input_section, offset)
      pairs.  */
   htab_t la25_stubs;
+
+  /* A table of mips_elf_r6_interwork_stubs, indexed by (symbol,
+     caller_is_micromips, needs_t9).  */
+  htab_t r6_interwork_stubs;
 
   /* A function FN (NAME, IS, OS) that creates a new input section
      called NAME and links it to output section OS.  If IS is nonnull,
@@ -1427,6 +1461,7 @@ mips_elf_link_hash_newfunc (struct bfd_hash_entry *entry,
       ret->no_fn_stub = false;
       ret->need_fn_stub = false;
       ret->has_nonpic_branches = false;
+      ret->has_r6_interwork_calls = false;
       ret->needs_lazy_stub = false;
       ret->use_plt_entry = false;
     }
@@ -1911,8 +1946,33 @@ mips_elf_la25_stub_eq (const void *entry1_, const void *entry2_)
 	      == entry2->h->root.root.u.def.value));
 }
 
-/* Called by the linker to set up the la25 stub-creation code.  FN is
-   the linker's implementation of add_stub_function.  Return true on
+/* Hashtable callbacks for mips_elf_r6_interwork_stubs.  */
+
+static hashval_t
+mips_elf_r6_interwork_stub_hash (const void *entry_)
+{
+  const struct mips_elf_r6_interwork_stub *entry = entry_;
+  hashval_t h;
+
+  h = htab_hash_pointer (entry->h);
+  h ^= (entry->caller_is_micromips << 1);
+  h ^= (entry->needs_t9 << 2);
+
+  return h;
+}
+
+static int
+mips_elf_r6_interwork_stub_eq (const void *entry1_, const void *entry2_)
+{
+  const struct mips_elf_r6_interwork_stub *entry1 = entry1_, *entry2 = entry2_;
+  return ((entry1->h == entry2->h)
+	   && (entry1->caller_is_micromips == entry2->caller_is_micromips)
+	   && (entry1->needs_t9 == entry2->needs_t9));
+}
+
+/* Called by the linker to set up the la25 and r6_interwork
+   stub-creation code.  FN is the linker's implementation of
+   add_stub_function.  Return true on
    success.  */
 
 bool
@@ -1930,6 +1990,11 @@ _bfd_mips_elf_init_stubs (struct bfd_link_info *info,
   htab->la25_stubs = htab_try_create (1, mips_elf_la25_stub_hash,
 				      mips_elf_la25_stub_eq, NULL);
   if (htab->la25_stubs == NULL)
+    return false;
+
+   htab->r6_interwork_stubs = htab_try_create (1, mips_elf_r6_interwork_stub_hash,
+				      mips_elf_r6_interwork_stub_eq, NULL);
+  if (htab->r6_interwork_stubs == NULL)
     return false;
 
   return true;
@@ -1953,6 +2018,21 @@ mips_elf_local_pic_function_p (struct mips_elf_link_hash_entry *h)
 	      || (h->fn_stub && h->need_fn_stub))
 	  && (PIC_OBJECT_P (h->root.root.u.def.section->owner)
 	      || ELF_ST_IS_MIPS_PIC (h->root.other)));
+}
+
+static bool
+mips_elf_r6_interwork_p (struct mips_elf_link_hash_entry *h)
+{
+	return ((h->root.root.type == bfd_link_hash_defined
+	         || h->root.root.type == bfd_link_hash_defweak)
+	        && h->root.def_regular
+	        && !bfd_is_abs_section (h->root.root.u.def.section)
+	        && !bfd_is_und_section (h->root.root.u.def.section)
+		&& h->has_r6_interwork_calls
+		&& (!PIC_OBJECT_P (h->root.root.u.def.section->owner)
+		    || !ELF_ST_IS_MIPS_PIC (h->root.other)
+		    || ((PIC_OBJECT_P (h->root.root.u.def.section->owner)
+	      		 || ELF_ST_IS_MIPS_PIC (h->root.other)))));
 }
 
 /* Set *SEC to the input section that contains the target of STUB.
@@ -2115,6 +2195,96 @@ mips_elf_add_la25_stub (struct bfd_link_info *info,
 	  : mips_elf_add_la25_intro (stub, info));
 }
 
+/* H describes a symbol that needs an r6 intework stub.  Make sure
+   that an appropriate stub exists and point H at it.  */
+
+static bool
+mips_elf_add_r6_interwork_stub (struct bfd_link_info *info,
+				struct mips_elf_link_hash_entry *h)
+{
+  struct mips_elf_link_hash_table *htab;
+  struct mips_elf_r6_interwork_stub search, *stub;
+  asection *s;
+  bfd_vma value;
+  bool needs_t9_p = false;
+  bool caller_is_micromips_p = false;
+  void **slot;
+
+  search.stub_section = NULL;
+  search.offset = 0;
+  search.h = h;
+
+  htab = mips_elf_hash_table (info);
+  if (htab == NULL)
+    return false;
+
+  slot = htab_find_slot (htab->r6_interwork_stubs, &search, INSERT);
+  if (slot == NULL)
+    return false;
+
+  stub = (struct mips_elf_r6_interwork_stub *) *slot;
+  if (stub != NULL)
+    {
+      h->r6_interwork_stub = stub;
+      return true;
+    }
+
+  stub = bfd_malloc (sizeof (search));
+  if (stub == NULL)
+    return false;
+  *stub = search;
+  *slot = stub;
+
+  /* Reuses la25's own shared trampoline section: the two stub
+     kinds are distinguished by symbol-name prefix (.interwork. vs .pic.),
+     so sharing is safe.  */
+  s = htab->strampoline;
+  if (s == NULL)
+    {
+      s = htab->add_stub_section (".text", NULL,
+				  h->root.root.u.def.section->output_section);
+      if (s == NULL || !bfd_link_align_section (s, 4))
+	return false;
+      htab->strampoline = s;
+    }
+
+  struct bfd_link_hash_entry *bh = NULL;
+  struct elf_link_hash_entry *elfh;
+  char *name = concat (".interwork.", h->root.root.root.string, NULL);
+  caller_is_micromips_p = !ELF_ST_IS_MICROMIPS (h->root.other);
+
+  if (h->has_nonpic_branches
+      && (PIC_OBJECT_P(h->root.root.u.def.section->owner)
+	  || ELF_ST_IS_MIPS_PIC (h->root.other)))
+    needs_t9_p = true;
+
+  value = s->size;
+  if (caller_is_micromips_p)
+    value |= 1;
+
+  _bfd_generic_link_add_one_symbol (info, s->owner, name, BSF_LOCAL, s,
+					value, NULL, true, false, &bh);
+  free (name);
+  elfh = (struct elf_link_hash_entry *) bh;
+  if (elfh != NULL)
+    {
+      elfh->type = ELF_ST_INFO (STB_LOCAL, STT_FUNC);
+      elfh->size = 12;
+      elfh->forced_local = 1;
+      if (caller_is_micromips_p)
+	elfh->other = ELF_ST_SET_MICROMIPS (elfh->other);
+    }
+
+  stub->stub_section = s;
+  stub->offset = s->size;
+  s->size += 12;
+  stub->caller_is_micromips = caller_is_micromips_p;
+  stub->needs_t9 = needs_t9_p;
+
+  h->r6_interwork_stub = stub;
+  return true;
+}
+
 /* A mips_elf_link_hash_traverse callback that is called before sizing
    sections.  DATA points to a mips_htab_traverse_info structure.  */
 
@@ -2150,6 +2320,13 @@ mips_elf_check_symbols (struct mips_elf_link_hash_entry *h, void *data)
 	  return false;
 	}
     }
+
+  if (mips_elf_r6_interwork_p (h) && !mips_elf_add_r6_interwork_stub (hti->info, h))
+    {
+	hti->error = true;
+	return false;
+    }
+
   return true;
 }
 
@@ -5516,6 +5693,48 @@ mips_elf_relocation_needs_la25_stub (bfd *input_bfd, int r_type,
       return false;
     }
 }
+
+static bool
+is_reloc_micromips (int r_type)
+{
+  switch (r_type)
+    {
+    case R_MICROMIPS_26_S1:
+    case R_MICROMIPS_PC7_S1:
+    case R_MICROMIPS_PC10_S1:
+    case R_MICROMIPS_PC16_S1:
+    case R_MICROMIPS_PC21_S1:
+    case R_MICROMIPS_PC26_S1:
+    case R_MICROMIPS_PC23_S2:
+      return true;
+
+    default:
+      return false;
+    }
+}
+
+static bool
+mips_elf_relocation_needs_r6_interwork_stub (int r_type)
+{
+  switch (r_type)
+    {
+    case R_MIPS_26:
+    case R_MIPS_PC16:
+    case R_MIPS_PC21_S2:
+    case R_MIPS_PC26_S2:
+    case R_MICROMIPS_26_S1:
+    case R_MICROMIPS_PC7_S1:
+    case R_MICROMIPS_PC10_S1:
+    case R_MICROMIPS_PC16_S1:
+    case R_MICROMIPS_PC21_S1:
+    case R_MICROMIPS_PC26_S1:
+    case R_MICROMIPS_PC23_S2:
+      return true;
+
+    default:
+      return false;
+    }
+}
 
 /* Obtain the field relocated by RELOCATION.  */
 
@@ -5944,7 +6163,18 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
       BFD_ASSERT (sec->size > 0);
       symbol = sec->output_section->vma + sec->output_offset;
     }
-  /* If this is a direct call to a PIC function, redirect to the
+  else if (h != NULL && !h->use_plt_entry && h->r6_interwork_stub
+	   && mips_elf_relocation_needs_r6_interwork_stub (r_type)
+	   && ((is_reloc_micromips (r_type) && !ELF_ST_IS_MICROMIPS (h->root.other))
+		   || (!is_reloc_micromips (r_type) && ELF_ST_IS_MICROMIPS (h->root.other))))
+    {
+	symbol = (h->r6_interwork_stub->stub_section->output_section->vma
+		  + h->r6_interwork_stub->stub_section->output_offset
+		  + h->r6_interwork_stub->offset);
+	if (!ELF_ST_IS_MICROMIPS (h->root.other))
+	  symbol |= 1;
+    }
+    /* If this is a direct call to a PIC function, redirect to the
      non-PIC stub.  */
   else if (h != NULL && h->la25_stub
 	   && mips_elf_relocation_needs_la25_stub (input_bfd, r_type,
@@ -6008,6 +6238,10 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
 				 || r_type == R_MIPS_JALR)
 				&& (target_is_16_bit_code_p
 				    || target_is_micromips_code_p))));
+
+  if (h != NULL && h->r6_interwork_stub
+      && h->has_r6_interwork_calls && *cross_mode_jump_p)
+    *cross_mode_jump_p = false;
 
   resolved_to_zero = (h != NULL
 		      && UNDEFWEAK_NO_DYNAMIC_RELOC (info, &h->root));
@@ -9212,6 +9446,11 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  && mips_elf_relocation_needs_la25_stub (abfd, r_type,
 						  ELF_ST_IS_MIPS16 (h->other)))
 	((struct mips_elf_link_hash_entry *) h)->has_nonpic_branches = true;
+	
+      if (h != NULL && MIPSR6_P (abfd) && mips_elf_relocation_needs_r6_interwork_stub (r_type)
+	  && ((is_reloc_micromips (r_type) && !ELF_ST_IS_MICROMIPS (h->other))
+		   || (!is_reloc_micromips (r_type) && ELF_ST_IS_MICROMIPS (h->other))))
+	((struct mips_elf_link_hash_entry *) h)->has_r6_interwork_calls = true;
 
       switch (r_type)
 	{
@@ -11186,6 +11425,66 @@ mips_elf_create_la25_stub (void **slot, void *data)
 	  bfd_put_32 (hti->output_bfd, 0, loc + 12);
 	}
     }
+  return true;
+}
+
+/* A function that iterates over each entry in r6_interwork_stubs and fills
+   in the code for each one.  DATA points to a mips_htab_traverse_info.  */
+
+static int
+mips_elf_create_r6_interwork_stub (void **slot, void *data)
+{
+  struct mips_htab_traverse_info *hti = data;
+  struct mips_elf_r6_interwork_stub *stub = *slot;
+  struct mips_elf_link_hash_entry *h = stub->h;
+  struct mips_elf_link_hash_table *htab;
+  asection *s;
+  bfd_byte *loc;
+  bfd_vma target, target_high, target_low;
+
+  htab = mips_elf_hash_table (hti->info);
+  BFD_ASSERT (htab != NULL);
+
+  s = stub->stub_section;
+  loc = s->contents;
+  if (loc == NULL)
+    {
+      /* May already be allocated by the la25 stub-writing pass, since
+	 both share htab->strampoline.  */
+      loc = bfd_malloc (s->size);
+      if (loc == NULL)
+	{
+	  hti->error = true;
+	  return false;
+	}
+      s->contents = loc;
+    }
+
+  target = (h->root.root.u.def.section->output_section->vma
+	    + h->root.root.u.def.section->output_offset
+	    + h->root.root.u.def.value);
+
+  target_high = ((target + 0x8000) >> 16) & 0xffff;
+  target_low = target & 0xffff;
+  if (ELF_ST_IS_MICROMIPS (stub->h->root.other))
+    target |= 1;
+
+  loc += stub->offset;
+
+  if (!ELF_ST_IS_MICROMIPS (stub->h->root.other))
+    {
+      bfd_put_micromips_32 (hti->output_bfd, LA25_LUI_MICROMIPS (hti->output_bfd, target_high), loc);
+      bfd_put_micromips_32 (hti->output_bfd, LA25_ADDIU_MICROMIPS (target_low), loc + 4);
+      bfd_put_16 (hti->output_bfd, LA25_JRC_MICROMIPS (25), loc + 8);
+      bfd_put_16 (hti->output_bfd, 0x0c00, loc + 10);
+    }
+  else
+    {
+      bfd_put_32 (hti->output_bfd, LA25_LUI (target_high), loc);
+      bfd_put_32 (hti->output_bfd, LA25_ADDIU (target_low), loc + 4);
+      bfd_put_32 (hti->output_bfd, JR_R6, loc + 8);
+    }
+
   return true;
 }
 
@@ -13374,6 +13673,8 @@ _bfd_mips_elf_copy_indirect_symbol (struct bfd_link_info *info,
     indmips->global_got_area = GGA_NONE;
   if (indmips->has_nonpic_branches)
     dirmips->has_nonpic_branches = true;
+  if (indmips->has_r6_interwork_calls)
+    dirmips->has_r6_interwork_calls = true;
 }
 
 /* Take care of the special `__gnu_absolute_zero' symbol and ignore attempts
@@ -15348,6 +15649,11 @@ _bfd_mips_elf_final_link (bfd *abfd, struct bfd_link_info *info)
   hti.output_bfd = abfd;
   hti.error = false;
   htab_traverse (htab->la25_stubs, mips_elf_create_la25_stub, &hti);
+  if (hti.error)
+    return false;
+
+  htab_traverse (htab->r6_interwork_stubs, mips_elf_create_r6_interwork_stub,
+		 &hti);
   if (hti.error)
     return false;
 
